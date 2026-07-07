@@ -37,6 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import java.util.UUID // Used to generate unique IDs
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
+import java.util.Locale
 
 class MainActivity : ComponentActivity() { //first activity when app is laucned
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +58,7 @@ class MainActivity : ComponentActivity() { //first activity when app is laucned
     }
 }
 
-@Composable  //an annotation that tells jetpack that the function is a user interface piece
+@Composable
 fun MainScreen() {
     val transactions = remember {
         mutableStateListOf(
@@ -65,7 +67,12 @@ fun MainScreen() {
         )
     }
 
-    // State variables to hold whatever text the user is typing right now
+    // 1. DYNAMIC CALCULATIONS
+    // Calculate total income, total expenses, and the remaining balance
+    val totalIncome = transactions.filter { !it.isExpense }.sumOf { it.amount }
+    val totalExpense = transactions.filter { it.isExpense }.sumOf { it.amount }
+    val totalBalance = totalIncome - totalExpense
+
     var titleInput by remember { mutableStateOf("") }
     var amountInput by remember { mutableStateOf("") }
 
@@ -78,10 +85,46 @@ fun MainScreen() {
         Text(
             text = "Money Tracker",
             fontSize = 24.sp,
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp)
         )
 
-        // The Scrolling List (takes up remaining space except the input area)
+        // 2. THE DASHBOARD CARD
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(text = "Total Balance", fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(
+                    text = "$${String.format(Locale.US,"%.2f", totalBalance)}",
+                    fontSize = 32.sp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(text = "Income", fontSize = 12.sp, color = Color(0xFF388E3C))
+                        Text(text = "+$${String.format(Locale.US,"%.2f", totalIncome)}", fontSize = 16.sp, color = Color(0xFF388E3C))
+                    }
+                    Column {
+                        Text(text = "Expenses", fontSize = 12.sp, color = Color(0xFFD32F2F))
+                        Text(text = "-$${String.format(Locale.US,"%.2f", totalExpense)}", fontSize = 16.sp, color = Color(0xFFD32F2F))
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // The Scrolling List
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -93,14 +136,14 @@ fun MainScreen() {
             }
         }
 
-        // --- INPUT FORM SECTION (At the bottom) ---
+        // --- INPUT FORM SECTION ---
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
                 .navigationBarsPadding()
+                .imePadding()
         ) {
-            // Title Input Field
             TextField(
                 value = titleInput,
                 onValueChange = { titleInput = it },
@@ -110,7 +153,6 @@ fun MainScreen() {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Amount Input Field
             TextField(
                 value = amountInput,
                 onValueChange = { amountInput = it },
@@ -120,48 +162,34 @@ fun MainScreen() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Action Buttons Row (Add Expense / Add Income)
             Row(modifier = Modifier.fillMaxWidth()) {
-
-                // Add Expense Button (Red)
                 Button(
                     onClick = {
                         val amount = amountInput.toDoubleOrNull() ?: 0.0
                         if (titleInput.isNotBlank() && amount > 0.0) {
-                            transactions.add(
-                                Transaction(UUID.randomUUID().toString(), titleInput, amount, isExpense = true)
-                            )
-                            // Clear inputs after adding
+                            transactions.add(Transaction(UUID.randomUUID().toString(), titleInput, amount, isExpense = true))
                             titleInput = ""
                             amountInput = ""
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text("Expense")
-                }
+                ) { Text("Expense") }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Add Income Button (Green)
                 Button(
                     onClick = {
                         val amount = amountInput.toDoubleOrNull() ?: 0.0
                         if (titleInput.isNotBlank() && amount > 0.0) {
-                            transactions.add(
-                                Transaction(UUID.randomUUID().toString(), titleInput, amount, isExpense = false)
-                            )
-                            // Clear inputs after adding
+                            transactions.add(Transaction(UUID.randomUUID().toString(), titleInput, amount, isExpense = false))
                             titleInput = ""
                             amountInput = ""
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF388E3C)),
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text("Income")
-                }
+                ) { Text("Income") }
             }
         }
     }
