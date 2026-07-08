@@ -18,6 +18,10 @@ import com.example.moneytracker.ui.theme.MoneyTrackerTheme
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,7 +109,7 @@ fun MainScreen() {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Transaction List
+        // The Scrolling List
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -113,7 +117,18 @@ fun MainScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(transactions) { item ->
-                TransactionItem(transaction = item)
+                TransactionItem(
+                    transaction = item,
+                    onDeleteClick = {
+                        // 1. Remove it from the live UI list
+                        transactions.remove(item)
+
+                        // 2. Save the updated list to persistent storage in the background
+                        coroutineScope.launch {
+                            settingsManager.saveTransactions(transactions)
+                        }
+                    }
+                )
             }
         }
 
@@ -147,7 +162,7 @@ fun MainScreen() {
                         val amount = amountInput.toDoubleOrNull() ?: 0.0
                         if (titleInput.isNotBlank() && amount > 0.0) {
                             val newTx = Transaction(UUID.randomUUID().toString(), titleInput, amount, isExpense = true)
-                            transactions.add(newTx)
+                            transactions.add(0, newTx)
 
                             // Save asynchronously to local device memory
                             coroutineScope.launch {
@@ -170,7 +185,7 @@ fun MainScreen() {
                         val amount = amountInput.toDoubleOrNull() ?: 0.0
                         if (titleInput.isNotBlank() && amount > 0.0) {
                             val newTx = Transaction(UUID.randomUUID().toString(), titleInput, amount, isExpense = false)
-                            transactions.add(newTx)
+                            transactions.add(0, newTx)
 
                             // Save asynchronously to local device memory
                             coroutineScope.launch {
@@ -190,7 +205,10 @@ fun MainScreen() {
 }
 
 @Composable
-fun TransactionItem(transaction: Transaction) {
+fun TransactionItem(
+    transaction: Transaction,
+    onDeleteClick: () -> Unit // 1. Added a click callback here
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -201,12 +219,30 @@ fun TransactionItem(transaction: Transaction) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically // Keeps everything lined up straight
         ) {
-            Text(text = transaction.title, fontSize = 18.sp)
+            // Left side: Title
+            Text(text = transaction.title, fontSize = 18.sp, modifier = Modifier.weight(1f))
+
+            // Middle: Price
             val prefix = if (transaction.isExpense) "-" else "+"
             val priceColor = if (transaction.isExpense) Color(0xFFD32F2F) else Color(0xFF388E3C)
-            Text(text = "$prefix$${String.format(Locale.US, "%.2f", transaction.amount)}", fontSize = 18.sp, color = priceColor)
+            Text(
+                text = "$prefix$${String.format(Locale.US, "%.2f", transaction.amount)}",
+                fontSize = 18.sp,
+                color = priceColor,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+
+            // Right side: Delete Button
+            IconButton(onClick = onDeleteClick) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete Transaction",
+                    tint = Color.Gray
+                )
+            }
         }
     }
 }
