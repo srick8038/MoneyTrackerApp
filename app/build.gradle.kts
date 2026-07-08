@@ -14,6 +14,7 @@ android {
     defaultConfig {
         applicationId = "com.example.moneytracker"
         minSdk = 24
+        //noinspection OldTargetApi
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -53,4 +54,6 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.google.gson)
 }
