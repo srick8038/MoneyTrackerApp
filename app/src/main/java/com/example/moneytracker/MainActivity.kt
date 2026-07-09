@@ -22,6 +22,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import java.text.SimpleDateFormat
+import java.util.Date
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,28 +111,61 @@ fun MainScreen() {
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
         // The Scrolling List
+        // Calculate our live dynamic salary periods
+        val salaryCycles = groupTransactionsBySalaryAnchor(transactions)
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = "History by Pay Cycle", fontSize = 16.sp, modifier = Modifier.padding(horizontal = 16.dp))
+
+        // --- NEW GROUPED SCROLLING LIST ---
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                .padding(top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(transactions) { item ->
-                TransactionItem(
-                    transaction = item,
-                    onDeleteClick = {
-                        // 1. Remove it from the live UI list
-                        transactions.remove(item)
-
-                        // 2. Save the updated list to persistent storage in the background
-                        coroutineScope.launch {
-                            settingsManager.saveTransactions(transactions)
-                        }
+            salaryCycles.forEach { cycle ->
+                // 1. STICKY HEADER FOR THE SALARY ANCHOR PERIOD
+                @OptIn(ExperimentalFoundationApi::class)
+                stickyHeader {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface) // Prevents list transparency overlap
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = cycle.title,
+                            fontSize = 14.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        val balanceColor = if (cycle.totalBalance >= 0) Color(0xFF388E3C) else Color(0xFFD32F2F)
+                        Text(
+                            text = "Net: $${String.format(Locale.US, "%.2f", cycle.totalBalance)}",
+                            fontSize = 12.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                            color = balanceColor
+                        )
                     }
-                )
+                }
+
+                // 2. ITEMS BELONGING TO THIS SPECIFIC CYCLE
+                items(cycle.items, key = { it.id }) { item ->
+                    TransactionItem(
+                        transaction = item,
+                        onDeleteClick = {
+                            transactions.remove(item)
+                            coroutineScope.launch {
+                                settingsManager.saveTransactions(transactions)
+                            }
+                        }
+                    )
+                }
             }
         }
 
@@ -245,4 +282,68 @@ fun TransactionItem(
             }
         }
     }
+}
+
+data class SalaryCycle(
+    val title: String,
+    val totalBalance: Double,
+    val items: List<Transaction>
+)
+
+fun groupTransactionsBySalaryAnchor(allTransactions: List<Transaction>): List<SalaryCycle> {
+    if (allTransactions.isEmpty()) return emptyList()
+
+    // 1. Sort transactions chronologically (oldest to newest) to process history step-by-step
+    val chronologicalList = allTransactions.sortedBy { it.timestamp }
+
+    val cycles = mutableListOf<SalaryCycle>()
+    var currentCycleItems = mutableListOf<Transaction>()
+    var currentCycleStartDate = ""
+
+    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.US)
+
+    for (tx in chronologicalList) {
+        // If this is the very first item in a cycle, capture its date as the cycle's starting point
+        if (currentCycleItems.isEmpty()) {
+            currentCycleStartDate = dateFormatter.format(Date(tx.timestamp))
+        }
+
+        // 2. ANCHOR CHECK: If we hit an income with "salary" in the title, close the existing cycle!
+        if (!tx.isExpense && tx.title.lowercase().contains("salary")) {
+            if (currentCycleItems.isNotEmpty()) {
+                // Calculate the balance of the cycle that is ending
+                val inc = currentCycleItems.filter { !it.isExpense }.sumOf { it.amount }
+                val exp = currentCycleItems.filter { it.isExpense }.sumOf { it.amount }
+
+                cycles.add(
+                    SalaryCycle(
+                        title = "Cycle starting $currentCycleStartDate",
+                        totalBalance = inc - exp,
+                        items = currentCycleItems.reversed() // Reverse back so newest shows on top of UI
+                    )
+                )
+            }
+            // Reset for the brand-new salary period
+            currentCycleItems = mutableListOf()
+            currentCycleStartDate = dateFormatter.format(Date(tx.timestamp))
+        }
+
+        currentCycleItems.add(tx)
+    }
+
+    // 3. Close out the final ongoing (current) cycle
+    if (currentCycleItems.isNotEmpty()) {
+        val inc = currentCycleItems.filter { !it.isExpense }.sumOf { it.amount }
+        val exp = currentCycleItems.filter { it.isExpense }.sumOf { it.amount }
+        cycles.add(
+            SalaryCycle(
+                title = "Current Cycle (from $currentCycleStartDate)",
+                totalBalance = inc - exp,
+                items = currentCycleItems.reversed()
+            )
+        )
+    }
+
+    // Return the list of cycles with the newest cycle at the top of the screen
+    return cycles.reversed()
 }
